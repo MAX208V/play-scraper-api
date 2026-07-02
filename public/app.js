@@ -1,15 +1,22 @@
-// v1782034198
+// v1782034199
 let editingAppId = null;
 let detailData = null;
 let countryNames = {};
 async function api(path, options = {}) {
-  const res = await fetch(path, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers }
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || '请求失败');
-  return data;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeout || 15000);
+  try {
+    const res = await fetch(path, {
+      ...options,
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', ...options.headers }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '请求失败');
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 function showToast(message) {
   const toast = document.getElementById('toast');
@@ -121,7 +128,7 @@ function renderApps(apps) {
                       '</div>' +
         '</div>' +
         '<div class="app-card-right">' +
-          '<div class="app-card-price' + (isBelow ? ' success' : '') + '" onclick="toggleTrend(\\x27' + escapeHtml(app.id) + '\\x27,this)" style="cursor:pointer;">' +
+          '<div class="app-card-price' + (isBelow ? ' success' : '') + '" onclick="toggleTrend(\x27' + escapeHtml(app.id) + '\x27,this)" style="cursor:pointer;">' +
             (changeArrow ? '<div class="price-top"><span class="price-arrow">' + changeArrow + '</span><span class="price-pct">' + changePct + '</span> ' : '') +
               '<span class="price-value">' + priceInfo.text + '</span>' +
             (changeArrow ? '</div>' : '') +
@@ -168,7 +175,7 @@ function renderApps(apps) {
         '</div>' +
       '</div>' : '') +
       // 最近动态
-      '<div class=\"app-card-event\" onclick=\"toggleEvents(this,\\x27' + escapeHtml(app.id) + '\x27)\">' +
+      '<div class=\"app-card-event\" onclick=\"toggleEvents(this,\x27' + escapeHtml(app.id) + '\x27)\">' +
         '<div class=\"event-toggle\">' +
           '<span class=\"material-symbols-rounded\" style=\"font-size:16px;\">payments</span><span class=\"event-preview\" id=\"event-preview-' + escapeHtml(app.id) + '\"></span>' +
           '<span class=\"material-symbols-rounded event-arrow\">expand_more</span>' +
@@ -446,8 +453,11 @@ function toggleCountryPicker(id) {
 }
 // ---- 立即检查 ----
 async function checkPrices() {
-  const btn = document.querySelector('.card-badge-refresh .material-symbols-rounded');
-  if (btn) btn.style.animation = 'spin .6s linear infinite';
+  const refreshBtn = document.querySelector('.card-badge-refresh');
+  const btnIcon = refreshBtn?.querySelector('.material-symbols-rounded');
+  if (refreshBtn) { refreshBtn.style.pointerEvents = 'none'; refreshBtn.style.opacity = '.6'; }
+  if (btnIcon) { btnIcon.textContent = 'sync'; btnIcon.style.animation = 'spin .6s linear infinite'; }
+  showToast('正在检查所有应用价格…');
   try {
     const res = await fetch('/api/check');
     const data = await res.json();
@@ -455,12 +465,17 @@ async function checkPrices() {
       showToast('检查失败: ' + (data.error || JSON.stringify(data.errors || data)));
       return;
     }
-    showToast('检查完成 (' + (data.results?.filter(r=>r.ok).length || 0) + '/' + (data.results?.length || 0) + ')');
+    const okCount = data.results?.filter(r=>r.ok).length || 0;
+    const totalCount = data.results?.length || 0;
+    const failCount = totalCount - okCount;
+    showToast('检查完成 (' + okCount + '/' + totalCount + ')' + (failCount > 0 ? '，' + failCount + '个失败' : ''));
+    if (failCount > 0) console.warn('[PricePrism] 检查失败:', data.results?.filter(r=>!r.ok).map(f=>f.app_id+': '+(f.error||'unknown')));
     await loadDashboard();
   } catch (e) {
     showToast('请求失败: ' + e.message);
   } finally {
-    if (btn) btn.style.animation = '';
+    if (refreshBtn) { refreshBtn.style.pointerEvents = ''; refreshBtn.style.opacity = ''; }
+    if (btnIcon) { btnIcon.textContent = 'refresh'; btnIcon.style.animation = ''; }
   }
 }
 // ---- 清空通知 ----
@@ -617,13 +632,31 @@ async function deleteApp(id) {
     setTimeout(() => location.reload(), 500);
   } catch (e) { showToast(e.message); }
 }
+// ── 数据缓存 (SWR) ──
+function getDashCache() {
+  try { const c=sessionStorage.getItem('pp_dash'); return c?JSON.parse(c):null; } catch(e){return null;}
+}
+function setDashCache(d) {
+  try { sessionStorage.setItem('pp_dash',JSON.stringify(d)); } catch(e){}
+}
+
 // ---- 主数据加载 ----
 async function loadDashboard() {
   try {
+    // 先显示缓存数据（如果有）
+    const cached = getDashCache();
+    if (cached) {
+      renderApps(cached.apps || []);
+      renderHistory(cached.history || []);
+    }
+    
     // 优先使用 <head> 中提前发起的请求
     const dashPromise = window.__dashPromise;
     delete window.__dashPromise;
     const data = dashPromise ? await dashPromise : await api('/api/dashboard');
+    
+    // 缓存到 sessionStorage
+    setDashCache(data);
     renderApps(data.apps);
     renderHistory(data.history);
     
@@ -634,16 +667,24 @@ async function loadDashboard() {
     
   } catch (e) { 
     showToast('加载失败: ' + e.message);
-    
-    // 显示空数据状态
-    renderApps([]);
-    renderHistory([]);
+    // 如果缓存有数据，保留缓存显示
+    if (!getDashCache()) {
+      renderApps([]);
+      renderHistory([]);
+    }
   }
 }
 
 // ---- Init ----
 document.getElementById('searchInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+});
+// ESC 关闭模态框
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    if (document.getElementById('detailOverlay')?.classList.contains('visible')) closeDetailModal();
+    if (document.getElementById('editOverlay')?.classList.contains('visible')) closeEditModal();
+  }
 });
 document.addEventListener('click', function(e) {
   const searchCard = document.querySelector('.card--search');

@@ -122,13 +122,17 @@ export async function handleAppsApi(request, env) {
   if (request.method === "PATCH") {
     const body = await request.json();
     if (!body.app_id) return jsonResponse({ error: "app_id required" }, 400);
+    // 白名单字段，防止意外字段注入
+    const ALLOWED_FIELDS = new Set([
+      "name","threshold","country","lang","note","monitor_mode",
+      "base_price","base_currency","threshold_type","threshold_pct"
+    ]);
     const fields = [];
     const values = [];
-    for (const [k, v] of Object.entries(body)) {
-      if (k === "app_id" || k === "id" || k === "countries") continue;
-
+    for (const k of Object.keys(body)) {
+      if (k === "app_id" || k === "id" || k === "countries" || !ALLOWED_FIELDS.has(k)) continue;
       fields.push(k + "=?");
-      values.push(v);
+      values.push(body[k]);
     }
     if (fields.length === 0) return jsonResponse({ error: "no fields" }, 400);
     if (body.countries && Array.isArray(body.countries)) {
@@ -247,8 +251,9 @@ export async function handleClearHistory(request, env) {
 export async function handleTrend(request, env) {
   const url = new URL(request.url);
   const appId = url.searchParams.get("appId");
-  if (!appId) return jsonResponse({ error: "appId required" }, 400);
+  if (!appId || appId.trim() === "") return jsonResponse({ error: "appId parameter is required" }, 400);
   const range = url.searchParams.get("range") || "week";
+  if (!["week","month","year"].includes(range)) return jsonResponse({ error: "invalid range, must be week/month/year" }, 400);
   const country = url.searchParams.get("country") || "us";
 
   const now = new Date();

@@ -219,6 +219,7 @@ html { font-family: var(--font); background: var(--bg); color: var(--body); font
 .app-card-sep { height: 1px; background: #c0c5bc; margin: var(--space-md) 0; width: 100%; }
 
 .app-card-main { display: flex; gap: var(--space-sm); align-items: flex-start; }
+.app-card-right { flex-shrink: 0; text-align: right; margin-left: auto; white-space: nowrap; }
 .app-card-icon { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; background: var(--canvas-soft); }
 .app-card-body { flex: 1; min-width: 0; }
 .app-card-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

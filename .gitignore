@@ -1,1 +1,10 @@
 .wrangler
+node_modules/
+.env
+*.pyc
+.DS_Store
+*.sql
+deploy_*.py
+deploy_*.mjs
+build.cjs
+build.mjs

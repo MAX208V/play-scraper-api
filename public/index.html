@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <!-- v40235 -->
-<html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>PricePrism</title><link rel="stylesheet" href="/styles.css">
+<html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>PricePrism</title>
+<style>/* critical FOUC fix */:root{--bg:#e8ebe6;--surface:#fff;--body:#1e2a1a;--mute:#6b7a64;--font:"Inter",-apple-system,BlinkMacSystemFont,sans-serif}*,:before,:after{box-sizing:border-box;margin:0;padding:0}html{font-family:var(--font);background:var(--bg);color:var(--body);font-size:14px;line-height:1.5}body{background:var(--bg)}</style>
+<link rel="stylesheet" href="/styles.css">
 <link href="https://cors.maxcloud.fun/?url=https%3A%2F%2Ffonts.googleapis.com%2Fcss2%3Ffamily%3DInter%3Aopsz%2Cwght%4014..32%2C400%3B14..32%2C500%3B14..32%2C600%3B14..32%2C700%26display%3Dswap" rel="stylesheet" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="/icons.css"><script>window.__dashPromise = fetch('/api/dashboard').then(function(r){return r.json()}).catch(function(){return null});</script></head><body>
 
@@ -10,34 +12,34 @@
 <main class="layout">
 
   <!-- Hero -->
-  <header class="hero">
+  <header class="hero" role="banner">
     <div class="hero-content">
-      <div class="hero-logo"><span class="material-symbols-rounded" style="font-size:36px;color:var(--primary);">monitoring</span><span class="hero-brand">PricePrism</span></div>
+      <div class="hero-logo"><span class="material-symbols-rounded" style="font-size:36px;color:var(--primary);" aria-hidden="true">monitoring</span><span class="hero-brand">PricePrism</span></div>
       <p class="hero-sub">Google Play 应用价格监控仪表盘</p>
     </div>
   </header>
 
   <!-- 搜索卡片（含添加功能） -->
-  <section class="card card--search">
+  <section class="card card--search" aria-label="搜索应用">
     <div class="card-header">
-      <span class="card-title-badge"><span class="material-symbols-rounded" style="font-size:14px;">search</span> 搜索应用</span>
+      <span class="card-title-badge"><span class="material-symbols-rounded" style="font-size:14px;" aria-hidden="true">search</span> 搜索应用</span>
     </div>
-    <div class="search-bar">
-      <input type="text" class="input search-input" id="searchInput" placeholder="输入应用名称或包名…">
-      <button class="btn btn--primary" onclick="doSearch()"><span class="material-symbols-rounded">search</span></button>
+    <div class="search-bar" role="search">
+      <input type="text" class="input search-input" id="searchInput" placeholder="输入应用名称或包名…" aria-label="搜索关键词">
+      <button class="btn btn--primary" onclick="doSearch()" aria-label="搜索"><span class="material-symbols-rounded" aria-hidden="true">search</span></button>
     </div>
-    <div id="searchResults" class="search-results"></div>
+    <div id="searchResults" class="search-results" role="listbox" aria-label="搜索结果"></div>
 
     <div class="add-collapse">
-      <span class="notif-toggle" onclick="toggleNotifHistory()" title="通知记录">
-        <span class="material-symbols-rounded">notifications</span>
-        <span class="notif-badge" id="historyCount">0</span>
+      <span class="notif-toggle" onclick="toggleNotifHistory()" title="通知记录" role="button" tabindex="0" aria-label="切换通知记录" onkeydown="if(event.key==='Enter')toggleNotifHistory()">
+        <span class="material-symbols-rounded" aria-hidden="true">notifications</span>
+        <span class="notif-badge" id="historyCount" aria-live="polite">0</span>
       </span>
-      <span class="notif-clear" onclick="clearHistory()" title="清空通知" style="font-size:11px;cursor:pointer;opacity:.5;margin-left:2px;">清空</span>
-      <span class="add-form-toggle" onclick="toggleAddForm()">
-        <span class="material-symbols-rounded">add_circle</span>
+      <span class="notif-clear" onclick="clearHistory()" title="清空通知" style="font-size:11px;cursor:pointer;opacity:.5;margin-left:2px;" role="button" tabindex="0" aria-label="清空通知" onkeydown="if(event.key==='Enter')clearHistory()">清空</span>
+      <span class="add-form-toggle" onclick="toggleAddForm()" role="button" tabindex="0" aria-label="切换添加手动监控表单" onkeydown="if(event.key==='Enter')toggleAddForm()">
+        <span class="material-symbols-rounded" aria-hidden="true">add_circle</span>
         <span>添加手动监控</span>
-        <span class="material-symbols-rounded add-arrow">expand_more</span>
+        <span class="material-symbols-rounded add-arrow" aria-hidden="true">expand_more</span>
       </span>
     </div>
     <form class="add-form" id="addForm" onsubmit="handleAddApp(event)" style="display:none;">
@@ -73,11 +75,11 @@
 </main>
 
 <!-- 详情弹窗 -->
-<div class="overlay" id="detailOverlay">
+<div class="overlay" id="detailOverlay" role="dialog" aria-label="应用详情弹窗" aria-modal="true">
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title">应用详情</span>
-      <button class="btn btn-icon" onclick="closeDetailModal()"><span class="material-symbols-rounded">close</span></button>
+      <button class="btn btn-icon" onclick="closeDetailModal()" aria-label="关闭详情弹窗"><span class="material-symbols-rounded" aria-hidden="true">close</span></button>
     </div>
     <div id="detailContent" class="detail-preview"></div>
     <div class="modal-body">
@@ -90,11 +92,11 @@
 </div>
 
 <!-- 编辑弹窗 -->
-<div class="overlay" id="editOverlay">
+<div class="overlay" id="editOverlay" role="dialog" aria-label="编辑监控弹窗" aria-modal="true">
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title">编辑监控</span>
-      <button class="btn btn-icon" onclick="closeEditModal()"><span class="material-symbols-rounded">close</span></button>
+      <button class="btn btn-icon" onclick="closeEditModal()" aria-label="关闭编辑弹窗"><span class="material-symbols-rounded" aria-hidden="true">close</span></button>
     </div>
     <div class="modal-body">
       <div class="form-field"><label class="label">应用名称</label><input type="text" class="input" id="editName"></div>
@@ -112,7 +114,9 @@
 </div>
 
 <!-- Toast -->
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="alert" aria-live="polite" aria-atomic="true"></div>
+<!-- 屏幕阅读器专用 -->
+<div aria-live="polite" aria-atomic="true" class="sr-only" id="srAnnounce"></div>
 
-<script src="/app.js?v=4"></script>
+<script src="/app.js?v=5"></script>
 </body></html>
