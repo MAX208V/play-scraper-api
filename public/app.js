@@ -699,7 +699,8 @@ document.addEventListener('click', function(e) {
     await loadCountries();
     // 加载背景
     try {
-      const bg = await api('/api/bg?mkt=zh-CN');
+      const dpr = window.devicePixelRatio || 1;
+      const bg = await api('/api/bg?mkt=zh-CN&w=' + Math.round(window.screen.width * dpr) + '&h=' + Math.round(window.screen.height * dpr));
       if (bg.url) {
         const el = document.getElementById('bgWallpaper');
         if (el) el.style.backgroundImage = 'url(' + bg.url + ')';
