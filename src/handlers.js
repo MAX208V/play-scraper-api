@@ -40,14 +40,111 @@ export function handleCountries() {
 }
 
 // ── Bing 壁纸 ──
-export async function handleBg() {
+// 默认市场：中国（zh-CN → cn.bing.com）
+const BING_DEFAULT_MKT = "zh-CN";
+
+// 中文系市场走 cn.bing.com，其余走 www.bing.com
+const BING_HOST_BY_MKT = {
+  "zh-CN": "cn.bing.com",
+  "zh-TW": "cn.bing.com",
+  "zh-HK": "cn.bing.com"
+};
+
+// 两位国家码 → Bing 市场代码 (mkt)
+const COUNTRY_TO_MKT = {
+  cn: "zh-CN", tw: "zh-TW", hk: "zh-HK",
+  us: "en-US", gb: "en-GB", au: "en-AU", ca: "en-CA",
+  sg: "en-SG", my: "en-MY", in: "en-IN",
+  jp: "ja-JP", kr: "ko-KR",
+  de: "de-DE", fr: "fr-FR", it: "it-IT", es: "es-ES", mx: "es-MX",
+  nl: "nl-NL", se: "sv-SE", no: "nb-NO", dk: "da-DK", fi: "fi-FI", ch: "de-CH",
+  br: "pt-BR", ru: "ru-RU", tr: "tr-TR",
+  th: "th-TH", id: "id-ID", vn: "vi-VN", ph: "en-PH",
+  za: "en-ZA", ae: "ar-AE", sa: "ar-SA"
+};
+
+const MKT_RE = /^[a-zA-Z]{2,3}-[a-zA-Z]{2}$/;
+
+// 标准化 mkt 参数（zh-cn → zh-CN），非法值回退默认
+function normalizeMkt(raw) {
+  if (!raw || typeof raw !== "string") return BING_DEFAULT_MKT;
+  const t = raw.trim();
+  if (!MKT_RE.test(t)) return BING_DEFAULT_MKT;
+  const [lang, region] = t.split("-");
+  return lang.toLowerCase() + "-" + region.toUpperCase();
+}
+
+function bingHost(mkt) {
+  return BING_HOST_BY_MKT[mkt] || "www.bing.com";
+}
+
+// 拼完整图片地址（Bing 返回相对路径 /th?id=...）
+function fullImageUrl(host, path) {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  return "https://" + host + path;
+}
+
+export async function handleBg(request) {
+  const url = new URL(request.url);
+  const q = url.searchParams;
+  const hasParams = [...q.keys()].length > 0;
+
+  // 1. 解析市场
+  let mkt = BING_DEFAULT_MKT;
+  if (q.get("mkt")) {
+    mkt = normalizeMkt(q.get("mkt"));
+  } else if (q.get("country")) {
+    const c = q.get("country").trim().toLowerCase();
+    mkt = COUNTRY_TO_MKT[c] || BING_DEFAULT_MKT;
+  }
+
+  // 2. 解析 idx / n（Bing 原生支持，n 上限 8）
+  let idx = parseInt(q.get("idx"), 10);
+  if (!Number.isFinite(idx) || idx < 0) idx = 0;
+  let n = parseInt(q.get("n"), 10);
+  if (!Number.isFinite(n) || n < 1) n = 1;
+  if (n > 8) n = 8;
+
+  const host = bingHost(mkt);
+  const apiUrl = `https://${host}/HPImageArchive.aspx?format=js&idx=${idx}&n=${n}&mkt=${mkt}`;
+
+  // 3. 请求 Bing
+  let data;
   try {
-    const resp = await fetch("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=en-US");
-    if (!resp.ok) return jsonResponse({ url: null });
-    const data = await resp.json();
-    const img = data.images?.[0];
-    return jsonResponse({ url: img ? "https://www.bing.com" + img.url : null, title: img?.copyright || "" });
-  } catch (e) { return jsonResponse({ url: null }); }
+    const resp = await fetch(apiUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!resp.ok) throw new Error("Bing API " + resp.status);
+    data = await resp.json();
+  } catch (e) {
+    // 无参数(302模式)失败时给 502；参数(JSON模式)失败时给 {url:null} 保持与原行为兼容
+    if (!hasParams) return jsonResponse({ error: "bing api unavailable", mkt }, 502);
+    return jsonResponse({ url: null, mkt });
+  }
+
+  const images = (data.images || []).map(img => ({
+    url: fullImageUrl(host, img.url),
+    title: img.copyright || img.title || "",
+    date: img.startdate || ""
+  })).filter(img => img.url);
+
+  // 4. 无参数：302 重定向到图片链接（默认为 zh-CN 今日壁纸）
+  if (!hasParams) {
+    const target = images[0]?.url;
+    if (!target) return jsonResponse({ error: "no image", mkt }, 502);
+    return new Response(null, {
+      status: 302,
+      headers: {
+        "Location": target,
+        "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*"
+      }
+    });
+  }
+
+  // 5. 有参数：返回 JSON
+  if (n > 1) return jsonResponse({ ok: true, mkt, images });
+  const first = images[0] || {};
+  return jsonResponse({ ok: true, url: first.url || null, title: first.title || "", mkt, date: first.date || "" });
 }
 
 // ── 应用 CRUD ──

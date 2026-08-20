@@ -32,7 +32,7 @@ export default {
       if (path === "/api/search") return await handleSearch(request, env);
       if (path === "/api/app-detail") return await handleAppDetail(request, env);
       if (path === "/api/countries") return await handleCountries();
-      if (path === "/api/bg") return await handleBg();
+      if (path === "/api/bg") return await handleBg(request);
       if (path === "/api/trend") return await handleTrend(request, env);
       if (path === "/api/app-events") return await handleAppEvents(request, env);
       if (path === "/api/icon") return await handleIcon(request, env);
