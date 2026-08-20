@@ -85,6 +85,56 @@ function fullImageUrl(host, path) {
   return "https://" + host + path;
 }
 
+// ── 分辨率选择：Bing 实测支持的分辨率（不支持组合返回 404）──
+const RES_LANDSCAPE = [
+  { key: "UHD", w: 3840, h: 2160 },
+  { key: "1920x1080", w: 1920, h: 1080 },
+  { key: "1366x768", w: 1366, h: 768 },
+  { key: "1280x720", w: 1280, h: 720 }
+];
+const RES_PORTRAIT = [
+  { key: "1080x1920", w: 1080, h: 1920 },
+  { key: "768x1366", w: 768, h: 1366 }
+];
+// 显式预设：?res=
+const RES_PRESETS = {
+  uhd: "UHD", "4k": "UHD",
+  "1080p": "1920x1080", "1920x1080": "1920x1080",
+  "1366x768": "1366x768",
+  "720p": "1280x720", "1280x720": "1280x720",
+  phone: "1080x1920", "1080x1920": "1080x1920", "768x1366": "768x1366"
+};
+const RES_BY_KEY = [...RES_LANDSCAPE, ...RES_PORTRAIT].reduce((m, r) => { m[r.key] = r; return m; }, {});
+
+// 按目标宽高选最接近的分辨率（面积差最小）
+function pickResolution(w, h) {
+  const portrait = h > w;
+  const list = portrait ? RES_PORTRAIT : RES_LANDSCAPE;
+  if (!(w > 0) || !(h > 0)) return list[0];
+  const target = w * h;
+  let best = list[0], bestDiff = Infinity;
+  for (const r of list) {
+    const diff = Math.abs(r.w * r.h - target);
+    if (diff < bestDiff) { bestDiff = diff; best = r; }
+  }
+  return best;
+}
+
+// 从 UA 判断设备方向：移动竖屏 1080x1920 / 桌面横屏 1920x1080
+function pickByUa(ua) {
+  const u = (ua || "").toLowerCase();
+  // 平板（含 iPadOS 的 Mobile 伪装）始终按横屏处理
+  if (/ipad|tablet/.test(u)) return RES_LANDSCAPE[1];
+  const mobile = /iphone|ipod|mobile/.test(u) || (/android/.test(u) && !/tablet/.test(u));
+  return mobile ? RES_PORTRAIT[0] : RES_LANDSCAPE[1];
+}
+
+// 把 Bing url 中的默认分辨率后缀替换为目标分辨率（url 与 rf 参数同步替换）
+function applyResolution(imgPath, res) {
+  if (!imgPath || !res) return imgPath;
+  return imgPath.split("_1920x1080").join("_" + res.key);
+}
+
 export async function handleBg(request) {
   const url = new URL(request.url);
   const q = url.searchParams;
@@ -106,6 +156,20 @@ export async function handleBg(request) {
   if (!Number.isFinite(n) || n < 1) n = 1;
   if (n > 8) n = 8;
 
+  // 2.5 分辨率：res 预设 > w/h 实际尺寸 > UA 自动
+  let res = null;
+  const resParam = q.get("res");
+  if (resParam && RES_PRESETS[String(resParam).toLowerCase()]) {
+    res = RES_BY_KEY[RES_PRESETS[String(resParam).toLowerCase()]];
+  } else {
+    const w = parseInt(q.get("w"), 10);
+    const h = parseInt(q.get("h"), 10);
+    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+      res = pickResolution(w, h);
+    }
+  }
+  if (!res) res = pickByUa(request.headers.get("User-Agent"));
+
   const host = bingHost(mkt);
   const apiUrl = `https://${host}/HPImageArchive.aspx?format=js&idx=${idx}&n=${n}&mkt=${mkt}`;
 
@@ -122,9 +186,10 @@ export async function handleBg(request) {
   }
 
   const images = (data.images || []).map(img => ({
-    url: fullImageUrl(host, img.url),
+    url: fullImageUrl(host, applyResolution(img.url, res)),
     title: img.copyright || img.title || "",
-    date: img.startdate || ""
+    date: img.startdate || "",
+    res: res.key
   })).filter(img => img.url);
 
   // 4. 无参数：302 重定向到图片链接（默认为 zh-CN 今日壁纸）
@@ -142,9 +207,9 @@ export async function handleBg(request) {
   }
 
   // 5. 有参数：返回 JSON
-  if (n > 1) return jsonResponse({ ok: true, mkt, images });
+  if (n > 1) return jsonResponse({ ok: true, mkt, res: res.key, images });
   const first = images[0] || {};
-  return jsonResponse({ ok: true, url: first.url || null, title: first.title || "", mkt, date: first.date || "" });
+  return jsonResponse({ ok: true, url: first.url || null, title: first.title || "", mkt, date: first.date || "", res: first.res || res.key });
 }
 
 // ── 应用 CRUD ──
