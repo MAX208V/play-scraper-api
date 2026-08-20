@@ -699,7 +699,7 @@ document.addEventListener('click', function(e) {
     await loadCountries();
     // 加载背景
     try {
-      const bg = await api('/api/bg');
+      const bg = await api('/api/bg?mkt=zh-CN');
       if (bg.url) {
         const el = document.getElementById('bgWallpaper');
         if (el) el.style.backgroundImage = 'url(' + bg.url + ')';
