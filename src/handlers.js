@@ -149,9 +149,14 @@ export async function handleBg(request) {
     mkt = COUNTRY_TO_MKT[c] || BING_DEFAULT_MKT;
   }
 
-  // 2. 解析 idx / n（Bing 原生支持，n 上限 8）
-  let idx = parseInt(q.get("idx"), 10);
-  if (!Number.isFinite(idx) || idx < 0) idx = 0;
+  // 2. 解析 idx / n（支持 idx=random，n 上限 8）
+  let idx;
+  if ((q.get("idx") || "").toLowerCase() === "random") {
+    idx = Math.floor(Math.random() * 8); // 0‑7 随机
+  } else {
+    idx = parseInt(q.get("idx"), 10);
+    if (!Number.isFinite(idx) || idx < 0) idx = 0;
+  }
   let n = parseInt(q.get("n"), 10);
   if (!Number.isFinite(n) || n < 1) n = 1;
   if (n > 8) n = 8;
@@ -192,21 +197,23 @@ export async function handleBg(request) {
     res: res.key
   })).filter(img => img.url);
 
-  // 4. 无参数：302 重定向到图片链接（默认为 zh-CN 今日壁纸）
-  if (!hasParams) {
+  // 4. 返回格式决定（format=json|image 覆盖默认行为：无参数→302，有参数→JSON）
+  const formatParam = (q.get("format") || "").toLowerCase();
+  const formatJson = formatParam === "json";
+  const formatImage = formatParam === "image" || formatParam === "redirect";
+  const useJson = formatJson || (!formatImage && hasParams);
+
+  if (!useJson) {
+    // 302 重定向到图片链接
     const target = images[0]?.url;
     if (!target) return jsonResponse({ error: "no image", mkt }, 502);
     return new Response(null, {
       status: 302,
-      headers: {
-        "Location": target,
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*"
-      }
+      headers: { Location: target, "Cache-Control": "public, max-age=3600", "Access-Control-Allow-Origin": "*" }
     });
   }
 
-  // 5. 有参数：返回 JSON
+  // JSON 响应
   if (n > 1) return jsonResponse({ ok: true, mkt, res: res.key, images });
   const first = images[0] || {};
   return jsonResponse({ ok: true, url: first.url || null, title: first.title || "", mkt, date: first.date || "", res: first.res || res.key });
