@@ -203,20 +203,30 @@ export async function handleBg(request) {
   const formatImage = formatParam === "image" || formatParam === "redirect";
   const useJson = formatJson || (!formatImage && hasParams);
 
+  // idx=random 时禁用缓存（每次请求都要重新随机）
+  const isRandom = (q.get("idx") || "").toLowerCase() === "random";
+  const cacheHeader = isRandom ? "no-cache, no-store" : "public, max-age=3600";
+
   if (!useJson) {
     // 302 重定向到图片链接
     const target = images[0]?.url;
     if (!target) return jsonResponse({ error: "no image", mkt }, 502);
     return new Response(null, {
       status: 302,
-      headers: { Location: target, "Cache-Control": "public, max-age=3600", "Access-Control-Allow-Origin": "*" }
+      headers: { Location: target, "Cache-Control": cacheHeader, "Access-Control-Allow-Origin": "*" }
     });
   }
 
   // JSON 响应
-  if (n > 1) return jsonResponse({ ok: true, mkt, res: res.key, images });
+  if (n > 1) {
+    const resp = jsonResponse({ ok: true, mkt, res: res.key, images });
+    if (isRandom) resp.headers.set("Cache-Control", "no-cache, no-store");
+    return resp;
+  }
   const first = images[0] || {};
-  return jsonResponse({ ok: true, url: first.url || null, title: first.title || "", mkt, date: first.date || "", res: first.res || res.key });
+  const resp = jsonResponse({ ok: true, url: first.url || null, title: first.title || "", mkt, date: first.date || "", res: first.res || res.key });
+  if (isRandom) resp.headers.set("Cache-Control", "no-cache, no-store");
+  return resp;
 }
 
 // ── 应用 CRUD ──
