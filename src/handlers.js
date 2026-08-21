@@ -151,8 +151,10 @@ export async function handleBg(request) {
 
   // 2. 解析 idx / n（支持 idx=random，n 上限 8）
   let idx;
-  if ((q.get("idx") || "").toLowerCase() === "random") {
-    idx = Math.floor(Math.random() * 8); // 0‑7 随机
+  const isRandom = (q.get("idx") || "").toLowerCase() === "random";
+  if (isRandom) {
+    // 随机模式：一次请求7张（n=7），然后从多张中随机选1张
+    idx = 0;
   } else {
     idx = parseInt(q.get("idx"), 10);
     if (!Number.isFinite(idx) || idx < 0) idx = 0;
@@ -160,6 +162,8 @@ export async function handleBg(request) {
   let n = parseInt(q.get("n"), 10);
   if (!Number.isFinite(n) || n < 1) n = 1;
   if (n > 8) n = 8;
+  // 随机模式：请求7张用于随机选择
+  if (isRandom) n = 7;
 
   // 2.5 分辨率：res 预设 > w/h 实际尺寸 > UA 自动
   let res = null;
@@ -204,29 +208,33 @@ export async function handleBg(request) {
   const useJson = formatJson || (!formatImage && hasParams);
 
   // idx=random 时禁用缓存（每次请求都要重新随机）
-  const isRandom = (q.get("idx") || "").toLowerCase() === "random";
   const cacheHeader = isRandom ? "no-cache, no-store" : "public, max-age=3600";
+
+  // 随机模式：从多张中随机选1张（Bing 只支持7天内壁纸，n=7返回7张）
+  const selected = isRandom && images.length > 1
+    ? images[Math.floor(Math.random() * images.length)]
+    : images[0];
 
   if (!useJson) {
     // 302 重定向到图片链接
-    const target = images[0]?.url;
-    if (!target) return jsonResponse({ error: "no image", mkt }, 502);
+    if (!selected) return jsonResponse({ error: "no image", mkt }, 502);
     return new Response(null, {
       status: 302,
-      headers: { Location: target, "Cache-Control": cacheHeader, "Access-Control-Allow-Origin": "*" }
+      headers: { Location: selected.url, "Cache-Control": cacheHeader, "Access-Control-Allow-Origin": "*" }
     });
   }
 
   // JSON 响应
-  if (n > 1) {
-    const resp = jsonResponse({ ok: true, mkt, res: res.key, images });
-    if (isRandom) resp.headers.set("Cache-Control", "no-cache, no-store");
+  if (isRandom) {
+    // 随机模式：返回选中的单张（每次不同）
+    const resp = jsonResponse({ ok: true, url: selected?.url || null, title: selected?.title || "", mkt, date: selected?.date || "", res: selected?.res || res.key });
+    resp.headers.set("Cache-Control", "no-cache, no-store");
     return resp;
   }
+
+  if (n > 1) return jsonResponse({ ok: true, mkt, res: res.key, images });
   const first = images[0] || {};
-  const resp = jsonResponse({ ok: true, url: first.url || null, title: first.title || "", mkt, date: first.date || "", res: first.res || res.key });
-  if (isRandom) resp.headers.set("Cache-Control", "no-cache, no-store");
-  return resp;
+  return jsonResponse({ ok: true, url: first.url || null, title: first.title || "", mkt, date: first.date || "", res: first.res || res.key });
 }
 
 // ── 应用 CRUD ──
