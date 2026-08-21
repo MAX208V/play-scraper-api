@@ -145,5 +145,48 @@ console.log('== 10. 替换后图片链接可访问性（HEAD）==');
   }
 }
 
+console.log('== 11. idx=random 随机选择壁纸 ==');
+{
+  const dates = new Set();
+  for (let i = 0; i < 12; i++) {
+    const d = await (await handleBg(req('idx=random&mkt=zh-CN'))).json();
+    dates.add(d.date);
+  }
+  check('idx=random 有返回结果', dates.size >= 1);
+  check('日期格式有效（或空）', [...dates].every(d => /^\d{8}$/.test(d) || d === ''));
+  console.log('  随机覆盖日期:', [...dates].sort().join(', '));
+
+  const r = await handleBg(req('format=image&idx=random'));
+  check('format=image + idx=random → 302', r.status === 302, (r.headers.get('Location')||'').slice(0, 60));
+}
+
+console.log('== 12. format=json|image 参数 ==');
+{
+  // format=json 无参数 → JSON（而非302）
+  let r = await handleBg(req('format=json'));
+  check('format=json 无参数 → JSON 200', r.status === 200);
+  let d = await r.json();
+  check('JSON 有 url 字段', !!d.url);
+
+  // format=image 有参数 → 302
+  r = await handleBg(req('format=image&mkt=zh-CN'));
+  check('format=image + 有参数 → 302', r.status === 302);
+  let loc = r.headers.get('Location') || '';
+  check('Location 有 cn.bing.com', loc.includes('cn.bing.com'), loc.slice(0, 60));
+
+  // format=image + w/h → 302 带分辨率
+  r = await handleBg(req('format=image&mkt=zh-CN&w=1080&h=1920'));
+  loc = r.headers.get('Location') || '';
+  check('format=image + w/h → 302 竖屏 1080x1920', r.status === 302 && loc.includes('1080x1920'), loc.slice(30, 70));
+
+  // format=bad（非法值）+ 有参数 → JSON（有参数走默认）
+  r = await handleBg(req('format=bad&mkt=zh-CN'));
+  check('format=bad（非法）+ 有参数 → JSON（fallback 默认）', r.status === 200);
+
+  // format=json + idx=random → JSON + 随机日期
+  d = await (await handleBg(req('format=json&idx=random&mkt=zh-CN'))).json();
+  check('format=json + idx=random → JSON', d.ok && d.mkt === 'zh-CN');
+}
+
 console.log(`\n===== 结果: ${pass} passed, ${fail} failed =====`);
 process.exit(fail > 0 ? 1 : 0);
